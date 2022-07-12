@@ -1,6 +1,9 @@
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.clients.producer.{ProducerRecord, RecordMetadata}
 import zio._
+import zio.blocking.Blocking
+import zio.clock.Clock
+import zio.duration.durationInt
 import zio.kafka.consumer.Consumer.OffsetRetrieval
 import zio.kafka.consumer._
 import zio.kafka.consumer.diagnostics.Diagnostics
@@ -9,13 +12,13 @@ import zio.kafka.serde.Serde
 
 object KafkaUtils {
 
-  val producerSettings: ZIO[Kafka, Nothing, ProducerSettings] =
-    ZIO.serviceWith[Kafka](_.bootstrapServers).map(ProducerSettings(_))
+  val producerSettings: ZIO[Has[Kafka], Nothing, ProducerSettings] =
+    ZIO.service[Kafka].map(_.bootstrapServers).map(ProducerSettings(_))
 
-  val producer: ZLayer[Kafka, Throwable, Producer] =
-    ZLayer.fromZIO(producerSettings) >>> Producer.live
+  val producer: ZLayer[Has[Kafka] with Blocking, Throwable, Has[Producer]] =
+    (ZLayer.requires[Blocking] ++ producerSettings.toLayer) >>> Producer.live
 
-  def produceMany(topic: String, kvs: Iterable[(String, String)]): ZIO[Producer, Throwable, Chunk[RecordMetadata]] =
+  def produceMany(topic: String, kvs: Iterable[(String, String)]): ZIO[Has[Producer], Throwable, Chunk[RecordMetadata]] =
     Producer
       .produceChunk[Any, String, String](
         Chunk.fromIterable(kvs.map { case (k, v) =>
@@ -25,8 +28,8 @@ object KafkaUtils {
         Serde.string
       )
 
-  def consumerSettings(clientId: String, groupId: String): URIO[Kafka, ConsumerSettings] =
-    ZIO.serviceWith[Kafka] { (kafka: Kafka) =>
+  def consumerSettings(clientId: String, groupId: String): URIO[Has[Kafka], ConsumerSettings] =
+    ZIO.service[Kafka].map { (kafka: Kafka) =>
       ConsumerSettings(kafka.bootstrapServers)
         .withClientId(clientId)
         .withCloseTimeout(5.seconds)
@@ -44,7 +47,7 @@ object KafkaUtils {
         .withGroupId(groupId)
     }
 
-  def consumer(clientId: String, groupId: String): ZLayer[Kafka, Throwable, Consumer] =
-    (ZLayer(consumerSettings(clientId, groupId)) ++ ZLayer.succeed(Diagnostics.NoOp)) >>> Consumer.live
+  def consumer(clientId: String, groupId: String): ZLayer[Has[Kafka] with Clock with Blocking, Throwable, Has[Consumer]] =
+    (consumerSettings(clientId, groupId).toLayer ++ ZLayer.succeed(Diagnostics.NoOp: Diagnostics) ++ ZLayer.requires[Clock with Blocking]) >>> Consumer.live
 
 }

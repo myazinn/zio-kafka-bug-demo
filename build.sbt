@@ -4,9 +4,9 @@ ThisBuild / scalaVersion := "2.13.8"
 
 lazy val root = (project in file(".")).settings(name := "root")
 
-lazy val zioVersion      = "2.0.0"
-lazy val zioKafkaVersion = "2.0.0"
-lazy val embeddedKafkaVersion = "3.2.0"
+lazy val zioVersion      = "1.0.13"
+lazy val zioKafkaVersion = "0.17.5"
+lazy val embeddedKafkaVersion = "3.1.0"
 
 ThisBuild / libraryDependencies ++= Seq(
   "dev.zio" %% "zio"         % zioVersion,
